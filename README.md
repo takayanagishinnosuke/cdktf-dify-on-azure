@@ -1,6 +1,97 @@
 # cdktf-dify-on-azure
 
-## Deploy on Azure
+[dify Azure terraform](https://github.com/nikawang/dify-azure-terraform)を 個人の学習の為、cdktf で書き直してみたものです。
+
+# Azure アーキテクチャ図
+
+```mermaid
+graph TB
+    subgraph "Virtual Network (10.x.0.0/16)"
+        subgraph "ACA Subnet (10.x.16.0/20)"
+            ACA[Azure Container Apps Environment]
+            nginx[Container App: Nginx]
+            web[Container App: Web UI]
+            api[Container App: API]
+            worker[Container App: Worker]
+            sandbox[Container App: Sandbox]
+            ssrfproxy[Container App: SSRF Proxy]
+        end
+
+        subgraph "Private Link Subnet (10.x.1.0/24)"
+            PE_REDIS[Private Endpoint: Redis]
+        end
+
+        subgraph "PostgreSQL Subnet (10.x.2.0/24)"
+            PSQL[PostgreSQL Flexible Server]
+        end
+    end
+
+    subgraph "Azure Services"
+        REDIS[Azure Cache for Redis]
+        SA[Storage Account]
+        LA[Log Analytics]
+    end
+
+    %% Container Apps の内部通信
+    nginx --> api
+    nginx --> web
+    api --> worker
+    api --> sandbox
+    api --> ssrfproxy
+    worker --> sandbox
+
+    %% Private Endpoint 接続
+    PE_REDIS --> REDIS
+
+    %% データベースとストレージの接続
+    api --> PSQL
+    worker --> PSQL
+    api --> SA
+    worker --> SA
+
+    %% 監視とログ
+    ACA --> LA
+
+    %% スタイル定義
+    classDef azure fill:#0078D4,stroke:#005A9E,color:white
+    classDef subnet fill:#D4D4D4,stroke:#BFBFBF
+    classDef container fill:#00A2ED,stroke:#0078D4,color:white
+
+    %% スタイルの適用
+    class REDIS,SA,LA,PSQL azure
+    class ACA azure
+    class nginx,web,api,worker,sandbox,ssrfproxy container
+```
+
+## アーキテクチャの説明
+
+### コンポーネント構成
+
+1. **Virtual Network**
+
+   - ACA Subnet (10.x.16.0/20): Azure Container Apps の実行環境
+   - Private Link Subnet (10.x.1.0/24): Private Endpoint の配置用
+   - PostgreSQL Subnet (10.x.2.0/24): PostgreSQL サーバーの配置用
+
+2. **Azure Container Apps**
+
+   - Nginx: リバースプロキシ
+   - Web UI: フロントエンド
+   - API: バックエンド
+   - Worker: 非同期処理用ワーカー
+   - Sandbox: ユーザーのコード実行環境
+   - SSRF Proxy: プロキシサービス
+
+3. **データストア**
+
+   - PostgreSQL Flexible Server: メインデータベース（PgVector 拡張機能付き）
+   - Azure Cache for Redis: キャッシュおよびメッセージブローカー
+   - Storage Account: ファイル保存, ファイル共有(マウント)
+
+4. **監視**
+   - Log Analytics: コンテナアプリのログ収集と分析
+
+## デプロイ
 
 install packages
 
@@ -29,7 +120,7 @@ deploy
 npx cdktf deploy
 ```
 
-## InfraCost
+## InfraCost での概算費用
 
 infra cot login
 
