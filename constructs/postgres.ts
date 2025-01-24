@@ -4,7 +4,6 @@ import { PostgresqlFlexibleServerDatabase } from '@cdktf/provider-azurerm/lib/po
 import { PostgresqlFlexibleServerConfiguration } from '@cdktf/provider-azurerm/lib/postgresql-flexible-server-configuration';
 import { PrivateDnsZone } from '@cdktf/provider-azurerm/lib/private-dns-zone';
 import { PrivateDnsZoneVirtualNetworkLink } from '@cdktf/provider-azurerm/lib/private-dns-zone-virtual-network-link';
-import { Id } from '@cdktf/provider-random/lib/id';
 
 interface PostgresConstructProps {
   resourceGroupName: string;
@@ -25,11 +24,6 @@ export class Postgres extends Construct {
   constructor(scope: Construct, id: string, props: PostgresConstructProps) {
     super(scope, id);
 
-    // ランダムIDの生成
-    const randomId = new Id(this, 'random_id', {
-      byteLength: 2,
-    });
-
     // プライベートDNSゾーンの作成
     const privateDnsZone = new PrivateDnsZone(this, 'postgres_dns', {
       name: 'private.postgres.database.azure.com',
@@ -38,7 +32,7 @@ export class Postgres extends Construct {
 
     // VNetとプライベートDNSゾーンのリンク
     new PrivateDnsZoneVirtualNetworkLink(this, 'postgres_dns_link', {
-      name: `${props.serverName}${randomId.hex}`,
+      name: `link-${props.serverName}`,
       privateDnsZoneName: privateDnsZone.name,
       virtualNetworkId: props.vnetId,
       resourceGroupName: props.resourceGroupName,
@@ -46,7 +40,7 @@ export class Postgres extends Construct {
 
     // PostgreSQLフレキシブルサーバーの作成
     this.server = new PostgresqlFlexibleServer(this, 'postgres', {
-      name: `${props.serverName}${randomId.hex}`,
+      name: props.serverName,
       resourceGroupName: props.resourceGroupName,
       location: props.region,
       version: '16',

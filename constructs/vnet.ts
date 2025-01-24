@@ -3,7 +3,7 @@ import { VirtualNetwork } from '@cdktf/provider-azurerm/lib/virtual-network';
 import { Subnet } from '@cdktf/provider-azurerm/lib/subnet';
 
 interface NetworkConstructProps {
-  projectName: string;
+  name: string;
   resourceGroupName: string;
   region: string;
   ipPrefix: string;
@@ -20,7 +20,7 @@ export class Vnet extends Construct {
 
     // 仮想ネットワークの作成
     this.virtualNetwork = new VirtualNetwork(this, 'vnet', {
-      name: `vnet-${props.projectName}`,
+      name: props.name,
       addressSpace: [`${props.ipPrefix}.0.0/16`],
       location: props.region,
       resourceGroupName: props.resourceGroupName,

@@ -3,6 +3,7 @@ import { App, TerraformStack, TerraformOutput } from 'cdktf';
 import { AzurermProvider } from '@cdktf/provider-azurerm/lib/provider';
 import { ResourceGroup } from '@cdktf/provider-azurerm/lib/resource-group';
 import { RandomProvider } from '@cdktf/provider-random/lib/provider';
+import { Id } from '@cdktf/provider-random/lib/id';
 import { Vnet } from './constructs/vnet';
 import { Postgres } from './constructs/postgres';
 import { Redis } from './constructs/redis';
@@ -21,6 +22,9 @@ class MyStack extends TerraformStack {
 
     // Random provider for generating unique identifiers
     new RandomProvider(this, 'random', {});
+    const randomId = new Id(this, 'random_id', {
+      byteLength: 2,
+    });
 
     const pjName = process.env.PROJECT_NAME || '';
 
@@ -30,7 +34,7 @@ class MyStack extends TerraformStack {
     });
 
     const vnet = new Vnet(this, 'vnet', {
-      projectName: pjName,
+      name: `vnet-${pjName}`,
       resourceGroupName: rg.name,
       region: rg.location,
       ipPrefix: '10.0',
@@ -41,7 +45,7 @@ class MyStack extends TerraformStack {
       region: rg.location,
       vnetId: vnet.virtualNetwork.id,
       postgresSubnetId: vnet.postgresSubnet.id,
-      serverName: pjName,
+      serverName: `psql-${pjName}${randomId.hex}`,
       adminUser: process.env.POSTGRES_ADMIN_USER || 'difyroot',
       adminPassword: process.env.POSTGRES_PASSWORD || '',
     });
@@ -51,11 +55,11 @@ class MyStack extends TerraformStack {
       region: rg.location,
       vnetId: vnet.virtualNetwork.id,
       privateLinkSubnetId: vnet.privateLinkSubnet.id,
-      name: pjName,
+      name: `redis-${pjName}${randomId.hex}`,
     });
 
     const fileShare = new FileShareConstruct(this, 'fileshare', {
-      storageAccountName: pjName,
+      storageAccountName: `stg${pjName}${randomId.hex}`,
       containerName: 'cdktf',
       resourceGroupName: rg.name,
       location: rg.location,

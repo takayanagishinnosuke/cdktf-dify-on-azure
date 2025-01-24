@@ -4,7 +4,6 @@ import { StorageContainer } from '@cdktf/provider-azurerm/lib/storage-container'
 import { StorageShare } from '@cdktf/provider-azurerm/lib/storage-share';
 import { StorageShareFile } from '@cdktf/provider-azurerm/lib/storage-share-file';
 import { StorageShareDirectory } from '@cdktf/provider-azurerm/lib/storage-share-directory';
-import { Id } from '@cdktf/provider-random/lib/id';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -30,14 +29,9 @@ export class FileShareConstruct extends Construct {
   constructor(scope: Construct, id: string, props: FileShareConstructProps) {
     super(scope, id);
 
-    // ランダムIDの生成
-    const randomId = new Id(this, 'random_id', {
-      byteLength: 2,
-    });
-
     // ストレージアカウントの作成
     this.storageAccount = new StorageAccount(this, 'storage_account', {
-      name: `${props.storageAccountName}${randomId.hex}`,
+      name: props.storageAccountName,
       resourceGroupName: props.resourceGroupName,
       location: props.location,
       accountTier: 'Standard',

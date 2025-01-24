@@ -2,7 +2,7 @@
 
 [dify Azure terraform](https://github.com/nikawang/dify-azure-terraform)を 個人の学習の為、cdktf で書き直してみたものです。
 
-# Azure アーキテクチャ図
+## Azure アーキテクチャ図
 
 ```mermaid
 graph TB
@@ -62,8 +62,6 @@ graph TB
     class ACA azure
     class nginx,web,api,worker,sandbox,ssrfproxy container
 ```
-
-## アーキテクチャの説明
 
 ### コンポーネント構成
 
