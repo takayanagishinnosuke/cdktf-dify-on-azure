@@ -1,80 +1,21 @@
 # cdktf-dify-on-azure
 
-[dify Azure terraform](https://github.com/nikawang/dify-azure-terraform)を 個人の学習の為、cdktf で書き直してみたものです。
+個人学習目的で、[dify Azure terraform](https://github.com/nikawang/dify-azure-terraform)を cdktf で書き直してみたものです。
 
-## Azure アーキテクチャ図
-
-```mermaid
-graph TB
-    subgraph "Virtual Network (10.x.0.0/16)"
-        subgraph "ACA Subnet (10.x.16.0/20)"
-            ACA[Azure Container Apps Environment]
-            nginx[Container App: Nginx]
-            web[Container App: Web UI]
-            api[Container App: API]
-            worker[Container App: Worker]
-            sandbox[Container App: Sandbox]
-            ssrfproxy[Container App: SSRF Proxy]
-        end
-
-        subgraph "Private Link Subnet (10.x.1.0/24)"
-            PE_REDIS[Private Endpoint: Redis]
-        end
-
-        subgraph "PostgreSQL Subnet (10.x.2.0/24)"
-            PSQL[PostgreSQL Flexible Server]
-        end
-    end
-
-    subgraph "Azure Services"
-        REDIS[Azure Cache for Redis]
-        SA[Storage Account]
-        LA[Log Analytics]
-    end
-
-    %% Container Apps の内部通信
-    nginx --> api
-    nginx --> web
-    api --> worker
-    api --> sandbox
-    api --> ssrfproxy
-    worker --> sandbox
-
-    %% Private Endpoint 接続
-    PE_REDIS --> REDIS
-
-    %% データベースとストレージの接続
-    api --> PSQL
-    worker --> PSQL
-    api --> SA
-    worker --> SA
-
-    %% 監視とログ
-    ACA --> LA
-
-    %% スタイル定義
-    classDef azure fill:#0078D4,stroke:#005A9E,color:white
-    classDef subnet fill:#D4D4D4,stroke:#BFBFBF
-    classDef container fill:#00A2ED,stroke:#0078D4,color:white
-
-    %% スタイルの適用
-    class REDIS,SA,LA,PSQL azure
-    class ACA azure
-    class nginx,web,api,worker,sandbox,ssrfproxy container
-```
+## Azure
 
 ### コンポーネント構成
 
 1. **Virtual Network**
 
-   - ACA Subnet (10.x.16.0/20): Azure Container Apps の実行環境
-   - Private Link Subnet (10.x.1.0/24): Private Endpoint の配置用
-   - PostgreSQL Subnet (10.x.2.0/24): PostgreSQL サーバーの配置用
+   - ACA Subnet (10.0.16.0/20): Azure Container Apps の実行環境
+   - Private Link Subnet (10.0.1.0/24): Private Endpoint の配置用
+   - PostgreSQL Subnet (10.0.2.0/24): PostgreSQL サーバーの配置用
 
 2. **Azure Container Apps**
 
    - Nginx: リバースプロキシ
-   - Web UI: フロントエンド
+   - Web: フロントエンド
    - API: バックエンド
    - Worker: 非同期処理用ワーカー
    - Sandbox: ユーザーのコード実行環境
@@ -87,7 +28,86 @@ graph TB
    - Storage Account: ファイル保存, ファイル共有(マウント)
 
 4. **監視**
+
    - Log Analytics: コンテナアプリのログ収集と分析
+
+5. **各コンテナの関係性**
+
+```mermaid
+flowchart TD
+subgraph Azure["Azure Container Apps Environment"]
+direction TB
+
+        nginx["Nginx Container
+        Port: 80
+        External: true"]
+
+        web["Web Frontend
+        Port: 3000
+        CPU: 1.0
+        Memory: 2Gi"]
+
+        api["API Server
+        Port: 5001
+        CPU: 2.0
+        Memory: 4Gi"]
+
+        worker["Worker
+        CPU: 2.0
+        Memory: 4Gi"]
+
+        sandbox["Sandbox
+        Port: 8194
+        CPU: 0.5
+        Memory: 1Gi"]
+
+        ssrfproxy["SSRF Proxy (Squid)
+        Ports: 3128/8194
+        CPU: 0.5
+        Memory: 1Gi"]
+
+        subgraph Storage["Azure Storage"]
+            direction LR
+            blob["Azure Blob Storage"]
+            files["Azure File Shares
+            - nginx config
+            - sandbox files
+            - ssrfproxy config"]
+        end
+    end
+
+    subgraph External["Internet"]
+        internet["Internet"]
+    end
+
+    %% External connections
+    internet --> nginx
+    nginx --> web
+    nginx --> api
+
+    %% Internal connections
+    web --> api
+    api --> worker
+    api --> sandbox
+    sandbox --> ssrfproxy
+    ssrfproxy --> internet
+
+    %% Storage connections
+    api --> blob
+    worker --> blob
+    nginx -.- files
+    sandbox -.- files
+    ssrfproxy -.- files
+
+    %% Styling
+    classDef container fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:black
+    classDef storage fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:black
+    classDef external fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:black
+
+    class nginx,web,api,worker,sandbox,ssrfproxy container
+    class blob,files storage
+    class postgres,redis,internet external
+```
 
 ## デプロイ
 
@@ -120,81 +140,32 @@ npx cdktf deploy
 
 ## InfraCost での概算費用
 
-infra cot login
+### 月額費用概算
+
+| コンポーネント    | スペック              | 基本料金 |
+| ----------------- | --------------------- | -------- |
+| PostgreSQL        | B_Standard_B1ms, 32GB | $23.40   |
+| Redis Cache       | Basic_C0 x 1          | $16.06   |
+| Private Endpoint  | 1 endpoint            | $7.30    |
+| Private DNS Zones | 2 zones               | $1.00    |
+
+上記 + 以下の課金：
+
+- Container Apps の課金
+
+- Storage Account（ストレージ容量、操作回数）
+- Log Analytics（ログデータ取り込み、クエリ実行、アーカイブ）
+- File Shares（データ保存、スナップショット、操作回数）
+
+実行コマンド:
 
 ```bash
+# infra cost login
 infracost auth login
-```
 
-synth and breakdown
-
-```bash
+# synth cdktf
 npx cdktf synth
+
+# infra cost breakdown
 infracost breakdown --path cdktf.out/stacks/cdktf-on-azure/
-```
-
-```
- Name                                                                          Monthly Qty  Unit                      Monthly Cost
-
- azurerm_redis_cache.redis_7140560C
- └─ Cache usage (Standard_C0)                                                            2  nodes                           $40.15
-
- azurerm_postgresql_flexible_server.postgres_30E79952
- ├─ Compute (B_Standard_B1ms)                                                          730  hours                           $18.98
- ├─ Storage                                                                             32  GB                               $4.42
- └─ Additional backup storage                                           Monthly cost depends on usage: $0.095 per GB
-
- azurerm_private_endpoint.redis_redis_pe_4F5E25C5
- ├─ Private endpoint                                                                   730  hour                             $7.30
- ├─ Inbound data processed (first 1PB)                                  Monthly cost depends on usage: $0.01 per GB
- └─ Outbound data processed (first 1PB)                                 Monthly cost depends on usage: $0.01 per GB
-
- azurerm_private_dns_zone.postgres_postgres_dns_EC151903
- └─ Hosted zone                                                                          1  months                           $0.50
-
- azurerm_private_dns_zone.redis_redis_dns_3E203D9D
- └─ Hosted zone                                                                          1  months                           $0.50
-
- azurerm_log_analytics_workspace.container_apps_log_analytics_BAA360C3
- ├─ Log data ingestion                                                  Monthly cost depends on usage: $3.34 per GB
- ├─ Log data export                                                     Monthly cost depends on usage: $0.15 per GB
- ├─ Basic log data ingestion                                            Monthly cost depends on usage: $0.73 per GB
- ├─ Basic log search queries                                            Monthly cost depends on usage: $0.00725 per GB searched
- ├─ Archive data                                                        Monthly cost depends on usage: $0.029 per GB
- ├─ Archive data restored                                               Monthly cost depends on usage: $0.15 per GB
- └─ Archive data searched                                               Monthly cost depends on usage: $0.00725 per GB
-
- azurerm_storage_account.fileshare_storage_account_5E47708B
- ├─ Capacity                                                            Monthly cost depends on usage: $0.02 per GB
- ├─ Write operations                                                    Monthly cost depends on usage: $0.05 per 10k operations
- ├─ List and create container operations                                Monthly cost depends on usage: $0.05 per 10k operations
- ├─ Read operations                                                     Monthly cost depends on usage: $0.004 per 10k operations
- ├─ All other operations                                                Monthly cost depends on usage: $0.004 per 10k operations
- └─ Blob index                                                          Monthly cost depends on usage: $0.0436 per 10k tags
-
- azurerm_storage_share.fileshare_share_nginx_6ED98AA8
- ├─ Data at rest                                                        Monthly cost depends on usage: $0.06 per GB
- ├─ Snapshots                                                           Monthly cost depends on usage: $0.06 per GB
- ├─ Read operations                                                     Monthly cost depends on usage: $0.0015 per 10k operations
- ├─ Write operations                                                    Monthly cost depends on usage: $0.015 per 10k operations
- ├─ List operations                                                     Monthly cost depends on usage: $0.015 per 10k operations
- └─ Other operations                                                    Monthly cost depends on usage: $0.0015 per 10k operations
-
- azurerm_storage_share.fileshare_share_sandbox_22736D98
- ├─ Data at rest                                                        Monthly cost depends on usage: $0.06 per GB
- ├─ Snapshots                                                           Monthly cost depends on usage: $0.06 per GB
- ├─ Read operations                                                     Monthly cost depends on usage: $0.0015 per 10k operations
- ├─ Write operations                                                    Monthly cost depends on usage: $0.015 per 10k operations
- ├─ List operations                                                     Monthly cost depends on usage: $0.015 per 10k operations
- └─ Other operations                                                    Monthly cost depends on usage: $0.0015 per 10k operations
-
- azurerm_storage_share.fileshare_share_ssrfproxy_925A43C9
- ├─ Data at rest                                                        Monthly cost depends on usage: $0.06 per GB
- ├─ Snapshots                                                           Monthly cost depends on usage: $0.06 per GB
- ├─ Read operations                                                     Monthly cost depends on usage: $0.0015 per 10k operations
- ├─ Write operations                                                    Monthly cost depends on usage: $0.015 per 10k operations
- ├─ List operations                                                     Monthly cost depends on usage: $0.015 per 10k operations
- └─ Other operations                                                    Monthly cost depends on usage: $0.0015 per 10k operations
-
-OVERALL TOTAL                                                                       $71.85
 ```

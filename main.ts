@@ -94,9 +94,9 @@ class MyStack extends TerraformStack {
       },
       minReplicas: 0,
       images: {
-        sandbox: 'langgenius/dify-sandbox:0.2.6',
-        api: 'langgenius/dify-api:0.7.1',
-        web: 'langgenius/dify-web:0.7.1',
+        sandbox: 'langgenius/dify-sandbox:latest',
+        api: 'langgenius/dify-api:latest',
+        web: 'langgenius/dify-web:latest',
       },
     });
 
